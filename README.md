@@ -421,4 +421,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/yourusername/flutter_next_auth).
+For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/handoud/flutter_next_auth).

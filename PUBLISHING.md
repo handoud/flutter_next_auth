@@ -75,7 +75,7 @@ After pushing to GitHub:
 dependencies:
   flutter_next_auth:
     git:
-      url: https://github.com/yourusername/flutter_next_auth.git
+      url: https://github.com/handoud/flutter_next_auth.git
 ```
 
 ## Package Features

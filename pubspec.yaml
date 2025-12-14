@@ -1,7 +1,8 @@
 name: flutter_next_auth
 description: A Flutter package for NextERP (Frappe/ERPNext) authentication with secure session management.
 version: 1.0.0
-homepage: https://github.com/yourusername/flutter_next_auth
+author: Mouhanned Ben Lazreg
+homepage: https://github.com/handoud/flutter_next_auth
 
 environment:
   sdk: '>=3.0.0 <4.0.0'
