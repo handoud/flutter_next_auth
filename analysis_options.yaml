@@ -1,0 +1,35 @@
+include: package:flutter_lints/flutter.yaml
+
+linter:
+  rules:
+    avoid_print: false
+    prefer_single_quotes: true
+    always_declare_return_types: true
+    avoid_empty_else: true
+    avoid_relative_lib_imports: true
+    await_only_futures: true
+    camel_case_types: true
+    cancel_subscriptions: true
+    constant_identifier_names: true
+    empty_catches: true
+    exhaustive_cases: true
+    implementation_imports: true
+    library_names: true
+    library_prefixes: true
+    no_duplicate_case_values: true
+    non_constant_identifier_names: true
+    prefer_const_constructors: true
+    prefer_const_declarations: true
+    prefer_final_fields: true
+    prefer_is_empty: true
+    prefer_is_not_empty: true
+    slash_for_doc_comments: true
+    type_init_formals: true
+    unnecessary_brace_in_string_interps: true
+    unnecessary_const: true
+    unnecessary_new: true
+    unnecessary_null_in_if_null_operators: true
+    unnecessary_this: true
+    unrelated_type_equality_checks: true
+    use_rethrow_when_possible: true
+    valid_regexps: true
