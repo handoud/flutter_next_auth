@@ -5,7 +5,8 @@ class NextAuthStorage {
   static const String _sidKey = 'next_erp_sid';
   static const String _usernameKey = 'next_erp_username';
   static const String _fullNameKey = 'next_erp_full_name';
-  
+  static const String _isAdminKey = 'next_erp_is_admin';
+
   final FlutterSecureStorage _storage;
 
   NextAuthStorage({FlutterSecureStorage? storage})
@@ -39,6 +40,17 @@ class NextAuthStorage {
   /// Retrieve stored full name
   Future<String?> getFullName() async {
     return await _storage.read(key: _fullNameKey);
+  }
+
+  /// Store admin status
+  Future<void> saveIsAdmin(bool isAdmin) async {
+    await _storage.write(key: _isAdminKey, value: isAdmin.toString());
+  }
+
+  /// Retrieve admin status
+  Future<bool> getIsAdmin() async {
+    final value = await _storage.read(key: _isAdminKey);
+    return value == 'true';
   }
 
   /// Check if session exists
