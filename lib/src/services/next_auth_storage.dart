@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
 /// Service for managing secure storage of session data
@@ -5,7 +6,7 @@ class NextAuthStorage {
   static const String _sidKey = 'next_erp_sid';
   static const String _usernameKey = 'next_erp_username';
   static const String _fullNameKey = 'next_erp_full_name';
-  static const String _isAdminKey = 'next_erp_is_admin';
+  static const String _userRolesKey = 'next_erp_user_roles';
 
   final FlutterSecureStorage _storage;
 
@@ -42,15 +43,30 @@ class NextAuthStorage {
     return await _storage.read(key: _fullNameKey);
   }
 
-  /// Store admin status
-  Future<void> saveIsAdmin(bool isAdmin) async {
-    await _storage.write(key: _isAdminKey, value: isAdmin.toString());
+  /// Store user roles as a JSON-encoded list
+  Future<void> saveUserRoles(List<String> roles) async {
+    final jsonString = jsonEncode(roles);
+    await _storage.write(key: _userRolesKey, value: jsonString);
   }
 
-  /// Retrieve admin status
-  Future<bool> getIsAdmin() async {
-    final value = await _storage.read(key: _isAdminKey);
-    return value == 'true';
+  /// Retrieve stored user roles
+  Future<List<String>> getUserRoles() async {
+    final jsonString = await _storage.read(key: _userRolesKey);
+    if (jsonString == null || jsonString.isEmpty) {
+      return [];
+    }
+    try {
+      final List<dynamic> decoded = jsonDecode(jsonString);
+      return decoded.cast<String>();
+    } catch (e) {
+      print('Error decoding user roles: $e');
+      return [];
+    }
+  }
+
+  /// Clear user roles from storage
+  Future<void> clearUserRoles() async {
+    await _storage.delete(key: _userRolesKey);
   }
 
   /// Check if session exists
@@ -64,6 +80,7 @@ class NextAuthStorage {
     await _storage.delete(key: _sidKey);
     await _storage.delete(key: _usernameKey);
     await _storage.delete(key: _fullNameKey);
+    await _storage.delete(key: _userRolesKey);
   }
 
   /// Clear all stored data

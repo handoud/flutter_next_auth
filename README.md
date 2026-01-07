@@ -11,6 +11,10 @@ A Flutter package for NextERP (Frappe/ERPNext) authentication with secure sessio
 ✅ Session management with secure storage (SID)  
 ✅ Automatic re-authentication using stored session  
 ✅ Get logged user profile  
+✅ Dynamic role-based access control (RBAC)  
+✅ Check user roles dynamically (Stock Manager, HR Admin, etc.)  
+✅ Multiple role checking (hasAnyRole, hasAllRoles)  
+✅ Offline role caching for performance  
 ✅ Simple, intuitive API  
 
 ## Installation
@@ -19,7 +23,7 @@ Add this to your package's `pubspec.yaml` file:
 
 ```yaml
 dependencies:
-  flutter_next_auth: ^1.0.0
+  flutter_next_auth: ^1.2.1
 ```
 
 Then run:
@@ -189,6 +193,88 @@ String? username = await flutternext.getStoredUsername();
 // Get stored full name
 String? fullName = await flutternext.getStoredFullName();
 ```
+
+### 10. Role-Based Access Control (RBAC)
+
+The package provides dynamic role checking functionality, allowing you to verify user permissions based on their assigned roles in NextERP/Frappe.
+
+#### Get User Roles
+
+```dart
+// Fetch roles from server and cache them
+List<String> roles = await flutternext.role.getUserRoles();
+print('User roles: $roles');
+
+// Get cached roles (no network call)
+List<String> cachedRoles = await flutternext.role.getCachedRoles();
+```
+
+#### Check Specific Role
+
+```dart
+// Check if user has a specific role
+bool isStockManager = await flutternext.role.hasRole('Stock Manager');
+bool isHRAdmin = await flutternext.role.hasRole('HR Admin');
+bool isSystemManager = await flutternext.role.hasRole('System Manager');
+
+if (isStockManager) {
+  // Show stock management features
+}
+
+// Force refresh from server
+bool isAdmin = await flutternext.role.hasRole('System Manager', refresh: true);
+```
+
+#### Check Multiple Roles
+
+```dart
+// Check if user has ANY of the specified roles
+bool canAccessStock = await flutternext.role.hasAnyRole([
+  'Stock Manager',
+  'Stock User',
+  'System Manager'
+]);
+
+if (canAccessStock) {
+  // Allow access to stock module
+}
+
+// Check if user has ALL of the specified roles
+bool hasFullAccess = await flutternext.role.hasAllRoles([
+  'Stock Manager',
+  'Sales Manager'
+]);
+
+if (hasFullAccess) {
+  // Grant full access to both modules
+}
+```
+
+#### Clear Cached Roles
+
+```dart
+// Clear cached role data
+await flutternext.role.clearCachedRoles();
+```
+
+#### Common Role Examples
+
+Here are some common roles in ERPNext/Frappe that you can check:
+
+- `System Manager` - System administrator with full access
+- `Administrator` - Super administrator
+- `HR Manager` - Human Resources management
+- `HR User` - Human Resources user
+- `Stock Manager` - Inventory/Stock management
+- `Stock User` - Inventory/Stock user
+- `Sales Manager` - Sales management
+- `Sales User` - Sales user
+- `Accounts Manager` - Accounting/Finance management
+- `Accounts User` - Accounting/Finance user
+- `Purchase Manager` - Purchase management
+- `Purchase User` - Purchase user
+
+**Note:** Role names are case-sensitive and must match exactly as defined in your ERPNext/Frappe system.
 
 ## Complete Example
 
@@ -367,12 +453,24 @@ The package uses `flutter_secure_storage` to securely store:
 - Session ID (SID)
 - Username
 - Full name
+- User roles (as JSON array)
 
 This data persists across app restarts and is encrypted on the device.
 
+### Role-Based Access Control
+
+The package provides flexible role checking:
+- **getUserRoles()**: Fetches roles from server using two methods:
+  1. Dedicated roles endpoint: `/api/method/frappe.core.doctype.user.user.get_roles`
+  2. Fallback to direct table query: `Has Role` table
+- **Caching**: Roles are cached locally for offline access and performance
+- **Dynamic Checking**: Check for any specific role name (e.g., 'Stock Manager', 'HR Admin')
+- **Multiple Role Checks**: Support for checking multiple roles with `hasAnyRole()` and `hasAllRoles()`
+- **Refresh Option**: Optionally force refresh from server instead of using cache
+
 ## API Reference
 
-### Methods
+### Authentication Methods
 
 | Method | Parameters | Returns | Description |
 |--------|------------|---------|-------------|
@@ -388,6 +486,17 @@ This data persists across app restarts and is encrypted on the device.
 | `getStoredUsername()` | - | `Future<String?>` | Get stored username |
 | `getStoredFullName()` | - | `Future<String?>` | Get stored full name |
 | `clearStoredSession()` | - | `Future<void>` | Clear local session data |
+
+### Role-Based Access Control Methods
+
+| Method | Parameters | Returns | Description |
+|--------|------------|---------|-------------|
+| `role.getUserRoles()` | - | `Future<List<String>>` | Fetch and cache user roles from server |
+| `role.getCachedRoles()` | - | `Future<List<String>>` | Get cached roles without network call |
+| `role.hasRole()` | `roleName`, `refresh?` | `Future<bool>` | Check if user has specific role |
+| `role.hasAnyRole()` | `roleNames`, `refresh?` | `Future<bool>` | Check if user has any of the roles |
+| `role.hasAllRoles()` | `roleNames`, `refresh?` | `Future<bool>` | Check if user has all of the roles |
+| `role.clearCachedRoles()` | - | `Future<void>` | Clear cached role data |
 
 ### Models
 
@@ -421,4 +530,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## Support
 
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/handoud/flutter_next_auth).
+For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/handoud/flutter_next_auth/tree/1.2.1).
