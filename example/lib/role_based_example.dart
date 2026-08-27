@@ -16,7 +16,7 @@ void main() async {
 }
 
 class RoleBasedApp extends StatelessWidget {
-  const RoleBasedApp({Key? key}) : super(key: key);
+  const RoleBasedApp({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -29,7 +29,7 @@ class RoleBasedApp extends StatelessWidget {
 }
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({Key? key}) : super(key: key);
+  const DashboardScreen({super.key});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
@@ -261,11 +261,11 @@ class FeatureGuard extends StatelessWidget {
   final Widget? fallback;
 
   const FeatureGuard({
-    Key? key,
+    super.key,
     required this.requiredRole,
     required this.child,
     this.fallback,
-  }) : super(key: key);
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -290,7 +290,7 @@ class FeatureGuard extends StatelessWidget {
 
 /// Example usage of FeatureGuard
 class ExampleFeatureGuardUsage extends StatelessWidget {
-  const ExampleFeatureGuardUsage({Key? key}) : super(key: key);
+  const ExampleFeatureGuardUsage({super.key});
 
   @override
   Widget build(BuildContext context) {
@@ -301,12 +301,12 @@ class ExampleFeatureGuardUsage extends StatelessWidget {
           // Only show delete button to Stock Managers
           FeatureGuard(
             requiredRole: 'Stock Manager',
+            fallback: const Text('You need Stock Manager role'),
             child: ElevatedButton.icon(
               onPressed: () {},
               icon: const Icon(Icons.delete),
               label: const Text('Delete Item'),
             ),
-            fallback: const Text('You need Stock Manager role'),
           ),
 
           // Only show reports to managers

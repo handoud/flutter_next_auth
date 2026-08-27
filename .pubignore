@@ -1,0 +1,21 @@
+# Build output and tool caches — never publish these.
+build/
+.dart_tool/
+.packages
+.flutter-plugins
+.flutter-plugins-dependencies
+pubspec.lock
+example/build/
+example/.dart_tool/
+example/pubspec.lock
+example/.flutter-plugins-dependencies
+
+# Internal notes, not useful to package consumers.
+PUBLISHING.md
+PACKAGE_SUMMARY.md
+
+# IDE and OS cruft
+.idea/
+.vscode/
+*.iml
+.DS_Store

@@ -1,7 +1,13 @@
 import 'dart:convert';
+import 'dart:developer' as developer;
+
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
-/// Service for managing secure storage of session data
+/// Secure storage for session data.
+///
+/// Values live in the iOS Keychain / Android Keystore / libsecret. Reads are
+/// platform-channel round trips and are not free, so [NextAuthService] caches
+/// the session id in memory rather than reading it per request.
 class NextAuthStorage {
   static const String _sidKey = 'next_erp_sid';
   static const String _usernameKey = 'next_erp_username';
@@ -13,78 +19,70 @@ class NextAuthStorage {
   NextAuthStorage({FlutterSecureStorage? storage})
       : _storage = storage ?? const FlutterSecureStorage();
 
-  /// Store session ID (SID) securely
-  Future<void> saveSid(String sid) async {
-    await _storage.write(key: _sidKey, value: sid);
-  }
+  /// Stores the session id.
+  Future<void> saveSid(String sid) => _storage.write(key: _sidKey, value: sid);
 
-  /// Retrieve stored session ID (SID)
-  Future<String?> getSid() async {
-    return await _storage.read(key: _sidKey);
-  }
+  /// Reads the stored session id.
+  Future<String?> getSid() => _storage.read(key: _sidKey);
 
-  /// Store username securely
-  Future<void> saveUsername(String username) async {
-    await _storage.write(key: _usernameKey, value: username);
-  }
+  /// Stores the user id.
+  Future<void> saveUsername(String username) =>
+      _storage.write(key: _usernameKey, value: username);
 
-  /// Retrieve stored username
-  Future<String?> getUsername() async {
-    return await _storage.read(key: _usernameKey);
-  }
+  /// Reads the stored user id.
+  Future<String?> getUsername() => _storage.read(key: _usernameKey);
 
-  /// Store user's full name
-  Future<void> saveFullName(String fullName) async {
-    await _storage.write(key: _fullNameKey, value: fullName);
-  }
+  /// Stores the user's full name.
+  Future<void> saveFullName(String fullName) =>
+      _storage.write(key: _fullNameKey, value: fullName);
 
-  /// Retrieve stored full name
-  Future<String?> getFullName() async {
-    return await _storage.read(key: _fullNameKey);
-  }
+  /// Reads the stored full name.
+  Future<String?> getFullName() => _storage.read(key: _fullNameKey);
 
-  /// Store user roles as a JSON-encoded list
-  Future<void> saveUserRoles(List<String> roles) async {
-    final jsonString = jsonEncode(roles);
-    await _storage.write(key: _userRolesKey, value: jsonString);
-  }
+  /// Caches the user's roles as a JSON array.
+  Future<void> saveUserRoles(List<String> roles) =>
+      _storage.write(key: _userRolesKey, value: jsonEncode(roles));
 
-  /// Retrieve stored user roles
+  /// Reads the cached roles, or an empty list when nothing is cached.
   Future<List<String>> getUserRoles() async {
     final jsonString = await _storage.read(key: _userRolesKey);
-    if (jsonString == null || jsonString.isEmpty) {
-      return [];
-    }
+    if (jsonString == null || jsonString.isEmpty) return const <String>[];
+
     try {
-      final List<dynamic> decoded = jsonDecode(jsonString);
-      return decoded.cast<String>();
-    } catch (e) {
-      print('Error decoding user roles: $e');
-      return [];
+      final decoded = jsonDecode(jsonString);
+      if (decoded is! List) return const <String>[];
+      return decoded.map((role) => role.toString()).toList();
+    } on FormatException catch (error) {
+      developer.log(
+        'Discarding corrupt cached roles',
+        name: 'flutter_next_auth',
+        error: error,
+      );
+      await clearUserRoles();
+      return const <String>[];
     }
   }
 
-  /// Clear user roles from storage
-  Future<void> clearUserRoles() async {
-    await _storage.delete(key: _userRolesKey);
-  }
+  /// Removes the cached roles.
+  Future<void> clearUserRoles() => _storage.delete(key: _userRolesKey);
 
-  /// Check if session exists
+  /// Whether a session id is stored. Does not check it against the server.
   Future<bool> hasSession() async {
     final sid = await getSid();
     return sid != null && sid.isNotEmpty;
   }
 
-  /// Clear all stored session data
+  /// Removes every value this package stores.
   Future<void> clearSession() async {
-    await _storage.delete(key: _sidKey);
-    await _storage.delete(key: _usernameKey);
-    await _storage.delete(key: _fullNameKey);
-    await _storage.delete(key: _userRolesKey);
+    await Future.wait([
+      _storage.delete(key: _sidKey),
+      _storage.delete(key: _usernameKey),
+      _storage.delete(key: _fullNameKey),
+      _storage.delete(key: _userRolesKey),
+    ]);
   }
 
-  /// Clear all stored data
-  Future<void> clearAll() async {
-    await _storage.deleteAll();
-  }
+  /// Removes **all** values in secure storage, including those written by
+  /// other packages. Prefer [clearSession].
+  Future<void> clearAll() => _storage.deleteAll();
 }

@@ -1,533 +1,331 @@
-# Flutter Next Auth
+# flutter_next_auth
 
-A Flutter package for NextERP (Frappe/ERPNext) authentication with secure session management.
+Authentication, session management and permission checks for Flutter apps that
+talk to a **Frappe / ERPNext** site.
+
+[![pub package](https://img.shields.io/pub/v/flutter_next_auth.svg)](https://pub.dev/packages/flutter_next_auth)
+
+```dart
+await FlutterNext.instance.initialize(baseUrl: 'https://erp.example.com');
+
+final result = await flutternext.login(usr: 'jane@example.com', pwd: 'secret');
+if (result.success) {
+  // Session stored securely. Call relogin() on the next launch.
+}
+```
 
 ## Features
 
-✅ Login with username and password  
-✅ Logout functionality  
-✅ Password reset request  
-✅ Password change/update  
-✅ Session management with secure storage (SID)  
-✅ Automatic re-authentication using stored session  
-✅ Get logged user profile  
-✅ Dynamic role-based access control (RBAC)  
-✅ Check user roles dynamically (Stock Manager, HR Admin, etc.)  
-✅ Multiple role checking (hasAnyRole, hasAllRoles)  
-✅ Offline role caching for performance  
-✅ Simple, intuitive API  
+- Login, logout, password reset and password change
+- Session (`sid`) stored in the Keychain / Keystore, restored on launch
+- **Token authentication** with an API key + secret, for web and background work
+- **Two factor authentication** for sites that require an OTP
+- **Permission checks** (`canRead`, `canWrite`, `canSubmit`, ...) that work on
+  every Frappe version
+- Role checks with a configurable source, for sites that still use them
+- Typed errors carrying Frappe's own `exc_type` and user-facing message
+- Escape hatch (`flutternext.api`) for any endpoint this package does not wrap
 
-## Installation
-
-Add this to your package's `pubspec.yaml` file:
+## Install
 
 ```yaml
 dependencies:
-  flutter_next_auth: ^1.2.1
+  flutter_next_auth: ^1.3.0
 ```
 
-Then run:
+Requires Dart 3.8 / Flutter 3.32 or newer.
 
-```bash
-flutter pub get
-```
+## Platform setup
 
-## Platform-Specific Setup
+| Platform | Notes |
+| --- | --- |
+| Android | Nothing required. Set `minSdkVersion 23` if you are below it. |
+| iOS / macOS | Nothing required. Enable the Keychain Sharing capability if you share a session between app extensions. |
+| Linux | `sudo apt-get install libsecret-1-dev libjsoncpp-dev` |
+| Windows | Nothing required. |
+| Web | **Use token authentication.** Browsers do not expose `Set-Cookie` to JavaScript, so session login cannot read the `sid` it needs. See below. |
 
-### Android
+## Authentication
 
-Add the following to your `android/app/src/main/AndroidManifest.xml` inside the `<application>` tag:
-
-```xml
-<application>
-    <!-- Other configurations -->
-    <activity
-        android:name=".MainActivity"
-        android:configChanges="orientation|keyboardHidden|keyboard|screenSize|smallestScreenSize|locale|layoutDirection|fontScale|screenLayout|density|uiMode"
-        android:hardwareAccelerated="true"
-        android:windowSoftInputMode="adjustResize">
-    </activity>
-</application>
-```
-
-### iOS
-
-No additional setup required.
-
-### Linux
-
-```bash
-sudo apt-get install libsecret-1-dev
-```
-
-## Usage
-
-### 1. Initialize
-
-Initialize the package with your NextERP server URL before using any authentication methods:
+### Session login
 
 ```dart
-import 'package:flutter_next_auth/flutter_next_auth.dart';
-
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  // Initialize FlutterNext with your server URL
-  await flutternext.initialize(
-    baseUrl: 'https://your-erp-server.com',
-  );
-  
-  runApp(MyApp());
-}
-```
-
-### 2. Login
-
-```dart
-final result = await flutternext.login(
-  usr: 'username@example.com',
-  pwd: 'password123',
+await FlutterNext.instance.initialize(
+  baseUrl: 'https://erp.example.com',
+  timeout: const Duration(seconds: 30),
 );
 
+final result = await flutternext.login(usr: 'jane@example.com', pwd: 'secret');
+
 if (result.success) {
-  print('Logged in as ${result.username}');
-  print('Full name: ${result.fullName}');
-  print('Session ID: ${result.sid}');
-  // Navigate to home screen
+  print('Signed in as ${result.fullName ?? result.username}');
+} else if (result.requiresTwoFactor) {
+  // See below.
 } else {
-  print('Login failed: ${result.message}');
-  // Show error message
+  print(result.message);
 }
 ```
 
-### 3. Relogin (Auto-Login)
+### Two factor authentication
 
-Use this to restore a user's session when the app starts:
+When the site has 2FA enabled, `login()` returns a result that is neither a
+success nor an ordinary failure. Check `requiresTwoFactor` **before** treating it
+as an error:
+
+```dart
+final result = await flutternext.login(usr: usr, pwd: pwd);
+
+if (result.requiresTwoFactor) {
+  final otp = await promptUserForCode(result.verification?['prompt']);
+
+  final confirmed = await flutternext.confirmTwoFactor(
+    usr: usr,
+    tmpId: result.tmpId!,
+    otp: otp,
+  );
+}
+```
+
+### Token authentication
+
+Create an API key and secret on the User document in the desk
+(*User → Settings → API Access → Generate Keys*), then:
+
+```dart
+await FlutterNext.instance.initialize(
+  baseUrl: 'https://erp.example.com',
+  apiKey: 'your_api_key',
+  apiSecret: 'your_api_secret',
+);
+```
+
+No `login()` call is needed. Token auth does not expire, is unaffected by session
+timeouts, and is the only scheme that works on Flutter web.
+
+> Do not ship a key and secret inside a distributed app — anyone can extract
+> them. Token auth is for trusted deployments, internal builds and server-side
+> work.
+
+### Restoring a session on launch
 
 ```dart
 final result = await flutternext.relogin();
 
 if (result.success) {
-  print('Session restored for ${result.user?.username}');
-  // Navigate to home screen
+  goToHome(result.user!);
+} else if (result.sessionCleared) {
+  goToLogin();          // the server rejected the session
 } else {
-  print('No valid session: ${result.message}');
-  // Navigate to login screen
+  showRetry(result.message);  // we could not reach the server; session kept
 }
 ```
 
-### 4. Logout
+`sessionCleared` matters: before 1.3.0 any failure — including being offline —
+wiped the session and signed the user out for good.
 
-```dart
-final result = await flutternext.logout();
-
-if (result.success) {
-  print('Logged out successfully');
-  // Navigate to login screen
-} else {
-  print('Logout error: ${result.message}');
-}
-```
-
-### 5. Reset Password
-
-```dart
-final result = await flutternext.resetPassword(
-  user: 'username@example.com',
-);
-
-if (result.success) {
-  print(result.message);
-  // Show success message
-} else {
-  print('Reset failed: ${result.message}');
-}
-```
-
-### 6. Change Password
+### Changing a password
 
 ```dart
 final result = await flutternext.changePassword(
-  oldPassword: 'currentpass123',
-  newPassword: 'newpass456',
+  oldPassword: 'old',
+  newPassword: 'new',
+  logoutOtherSessions: true,
 );
+```
 
-if (result.success) {
-  print('Password changed successfully');
-} else {
-  print('Change failed: ${result.message}');
+Frappe issues a **new** session id during this call. It is stored automatically.
+If you share the session with other clients, refresh them with `result.sid`.
+
+## Permissions (recommended)
+
+Ask what the user may *do*, not what roles they hold. These map onto
+`frappe.client.has_permission` and `frappe.client.get_doc_permissions`, are what
+the desk itself uses, and are stable across Frappe v13 to v16.
+
+```dart
+if (await flutternext.role.canCreate('Sales Invoice')) {
+  showNewInvoiceButton();
+}
+
+if (await flutternext.role.canSubmit('Stock Entry', docname: 'STE-0001')) {
+  showSubmitButton();
 }
 ```
 
-### 7. Get User Profile
+One request for several decisions on the same document:
 
 ```dart
-final user = await flutternext.getUserProfile();
+final perms = await flutternext.role.getDocPermissions('Sales Order', 'SO-0007');
 
-if (user != null) {
-  print('Username: ${user.username}');
-  print('Full name: ${user.fullName}');
-  print('Email: ${user.email}');
-}
+if (perms.write)  showEditButton();
+if (perms.submit) showSubmitButton();
+if (perms.cancel) showCancelButton();
 ```
 
-### 8. Check Active Session
+Document-level checks respect User Permissions and owner-only rules, which role
+checks cannot see.
+
+## Roles
+
+> **Frappe v16 removed the built-in roles endpoint.**
+> `frappe.core.doctype.user.user.get_roles` exists in v13–v15 only. If your app
+> depends on role names, configure `rolesMethod` — otherwise role lookups may
+> return an empty list.
 
 ```dart
-bool hasSession = await flutternext.hasActiveSession();
-
-if (hasSession) {
-  print('User has an active session');
-}
-```
-
-### 9. Get Stored Data
-
-```dart
-// Get stored session ID
-String? sid = await flutternext.getStoredSid();
-
-// Get stored username
-String? username = await flutternext.getStoredUsername();
-
-// Get stored full name
-String? fullName = await flutternext.getStoredFullName();
-```
-
-### 10. Role-Based Access Control (RBAC)
-
-The package provides dynamic role checking functionality, allowing you to verify user permissions based on their assigned roles in NextERP/Frappe.
-
-#### Get User Roles
-
-```dart
-// Fetch roles from server and cache them
-List<String> roles = await flutternext.role.getUserRoles();
-print('User roles: $roles');
-
-// Get cached roles (no network call)
-List<String> cachedRoles = await flutternext.role.getCachedRoles();
-```
-
-#### Check Specific Role
-
-```dart
-// Check if user has a specific role
 bool isStockManager = await flutternext.role.hasRole('Stock Manager');
-bool isHRAdmin = await flutternext.role.hasRole('HR Admin');
-bool isSystemManager = await flutternext.role.hasRole('System Manager');
 
-if (isStockManager) {
-  // Show stock management features
-}
-
-// Force refresh from server
-bool isAdmin = await flutternext.role.hasRole('System Manager', refresh: true);
-```
-
-#### Check Multiple Roles
-
-```dart
-// Check if user has ANY of the specified roles
-bool canAccessStock = await flutternext.role.hasAnyRole([
+bool canSeeStock = await flutternext.role.hasAnyRole([
   'Stock Manager',
   'Stock User',
-  'System Manager'
+  'System Manager',
 ]);
 
-if (canAccessStock) {
-  // Allow access to stock module
-}
+bool hasBoth = await flutternext.role.hasAllRoles(['Accounts Manager', 'Auditor']);
 
-// Check if user has ALL of the specified roles
-bool hasFullAccess = await flutternext.role.hasAllRoles([
-  'Stock Manager',
-  'Sales Manager'
-]);
-
-if (hasFullAccess) {
-  // Grant full access to both modules
-}
-```
-
-#### Clear Cached Roles
-
-```dart
-// Clear cached role data
+final roles = await flutternext.role.getUserRoles();   // fetch and cache
+final cached = await flutternext.role.getCachedRoles(); // no network
 await flutternext.role.clearCachedRoles();
 ```
 
-#### Common Role Examples
+Roles are cached in secure storage after the first successful fetch. Pass
+`refresh: true` to force a round trip.
 
-Here are some common roles in ERPNext/Frappe that you can check:
+### Making role lookup deterministic
 
-- `System Manager` - System administrator with full access
-- `Administrator` - Super administrator
-- `HR Manager` - Human Resources management
-- `HR User` - Human Resources user
-- `Stock Manager` - Inventory/Stock management
-- `Stock User` - Inventory/Stock user
-- `Sales Manager` - Sales management
-- `Sales User` - Sales user
-- `Accounts Manager` - Accounting/Finance management
-- `Accounts User` - Accounting/Finance user
-- `Purchase Manager` - Purchase management
-- `Purchase User` - Purchase user
+Add three lines to any custom app on your site:
 
-**Note:** Role names are case-sensitive and must match exactly as defined in your ERPNext/Frappe system.
+```python
+# your_app/api.py
+import frappe
 
-## Complete Example
+@frappe.whitelist()
+def my_roles():
+    return frappe.get_roles()
+```
 
 ```dart
-import 'package:flutter/material.dart';
-import 'package:flutter_next_auth/flutter_next_auth.dart';
+await FlutterNext.instance.initialize(
+  baseUrl: 'https://erp.example.com',
+  rolesMethod: 'your_app.api.my_roles',
+);
+```
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-  
-  await flutternext.initialize(
-    baseUrl: 'https://demo.erpnext.com',
-  );
-  
-  runApp(MyApp());
+This works on every Frappe version and needs no special permissions.
+
+## Sharing the session with other clients
+
+```dart
+final cookie = await flutternext.cookieHeader();   // "sid=..."
+```
+
+Pass it to `flutter_next_base`, a `socket_io_client` connection, or a WebView so
+the whole app runs on one session:
+
+```dart
+// flutter_next_base
+class NextAuthCookieManager implements CookieManager {
+  @override
+  Future<String> getCookies(String url) async =>
+      await flutternext.cookieHeader() ?? '';
+
+  @override
+  Future<void> saveCookies(String url, List<String> cookies) async {}
 }
 
-class MyApp extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Flutter Next Auth Demo',
-      home: LoginScreen(),
-    );
-  }
-}
+final client = FlutterNextBaseClient(
+  baseUrl: 'https://erp.example.com',
+  cookieManager: NextAuthCookieManager(),
+);
+```
 
-class LoginScreen extends StatefulWidget {
-  @override
-  _LoginScreenState createState() => _LoginScreenState();
-}
+## Calling any other endpoint
 
-class _LoginScreenState extends State<LoginScreen> {
-  final _usernameController = TextEditingController();
-  final _passwordController = TextEditingController();
-  bool _isLoading = false;
+```dart
+final response = await flutternext.api.get(
+  '/api/method/frappe.client.get_count',
+  query: {'doctype': 'Task', 'filters': [['status', '=', 'Open']]},
+);
+final count = flutternext.api.parseResponse(response)['message'];
+```
 
-  @override
-  void initState() {
-    super.initState();
-    _checkExistingSession();
-  }
+Query values are encoded properly — lists and maps are JSON-encoded, and `+`
+signs survive.
 
-  Future<void> _checkExistingSession() async {
-    final result = await flutternext.relogin();
-    if (result.success) {
-      _navigateToHome();
-    }
-  }
+## Error handling
 
-  Future<void> _handleLogin() async {
-    setState(() => _isLoading = true);
-
-    final result = await flutternext.login(
-      usr: _usernameController.text,
-      pwd: _passwordController.text,
-    );
-
-    setState(() => _isLoading = false);
-
-    if (result.success) {
-      _navigateToHome();
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result.message ?? 'Login failed')),
-      );
-    }
-  }
-
-  void _navigateToHome() {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => HomeScreen()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Login')),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            TextField(
-              controller: _usernameController,
-              decoration: InputDecoration(labelText: 'Username'),
-            ),
-            SizedBox(height: 16),
-            TextField(
-              controller: _passwordController,
-              decoration: InputDecoration(labelText: 'Password'),
-              obscureText: true,
-            ),
-            SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _isLoading ? null : _handleLogin,
-              child: _isLoading
-                  ? CircularProgressIndicator()
-                  : Text('Login'),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class HomeScreen extends StatelessWidget {
-  Future<void> _handleLogout(BuildContext context) async {
-    await flutternext.logout();
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => LoginScreen()),
-    );
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Home'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.logout),
-            onPressed: () => _handleLogout(context),
-          ),
-        ],
-      ),
-      body: Center(
-        child: FutureBuilder<UserProfile?>(
-          future: flutternext.getUserProfile(),
-          builder: (context, snapshot) {
-            if (snapshot.hasData) {
-              final user = snapshot.data!;
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text('Welcome, ${user.fullName ?? user.username}!'),
-                  SizedBox(height: 16),
-                  Text('Email: ${user.email ?? "N/A"}'),
-                ],
-              );
-            }
-            return CircularProgressIndicator();
-          },
-        ),
-      ),
-    );
-  }
+```dart
+try {
+  final response = await flutternext.api.post('/api/method/your_app.api.thing');
+  flutternext.api.parseResponse(response);
+} on NextApiException catch (e) {
+  if (e.isAuthError)      goToLogin();
+  else if (e.isTransportError) showRetry();
+  else if (e.excType == 'ValidationError') showMessage(e.message);
 }
 ```
 
-## How It Works
+`e.message` is the text `frappe.throw()` showed the user, pulled out of
+`_server_messages` and stripped of markup.
 
-### Session Management
+## API reference
 
-1. **Login**: When you call `flutternext.login()`, the package:
-   - Sends credentials to NextERP server
-   - Receives a session ID (SID) in response cookies
-   - Stores the SID securely using `flutter_secure_storage`
-   - Returns user information
+### `FlutterNext`
 
-2. **Relogin**: When you call `flutternext.relogin()`, the package:
-   - Retrieves the stored SID from secure storage
-   - Makes a request to get the logged-in user profile
-   - If successful, the session is still valid
-   - If failed, clears the stored session
+| Member | Description |
+| --- | --- |
+| `initialize({baseUrl, timeout, apiKey, apiSecret, rolesMethod, force})` | Configure against a site |
+| `login({usr, pwd})` | Sign in |
+| `confirmTwoFactor({usr, tmpId, otp})` | Complete a 2FA login |
+| `logout()` | Sign out and clear stored data |
+| `relogin()` | Restore and verify a stored session |
+| `resetPassword({user})` | Email reset instructions |
+| `changePassword({oldPassword, newPassword, logoutOtherSessions})` | Change password |
+| `getUserProfile()` | Current user, or null |
+| `hasStoredSession()` | Local check, no network |
+| `validateSession()` | Live check against the server |
+| `cookieHeader()` | `"sid=..."` for other clients |
+| `getServerVersions()` | Frappe and app versions |
+| `api` | `NextApiClient` for arbitrary calls |
+| `role` | `NextRoleService` |
+| `auth` | `NextAuthService` |
+| `dispose()` | Release the HTTP client |
 
-3. **Authenticated Requests**: All subsequent API calls automatically include the stored SID in the cookie header
+### `NextRoleService`
 
-4. **Logout**: Clears both server-side session and local storage
+`canRead` · `canWrite` · `canCreate` · `canDelete` · `canSubmit` · `canCancel` ·
+`hasPermission` · `getDocPermissions` · `hasRole` · `hasAnyRole` ·
+`hasAllRoles` · `getUserRoles` · `getCachedRoles` · `clearCachedRoles`
 
-### Secure Storage
+## Frappe compatibility
 
-The package uses `flutter_secure_storage` to securely store:
-- Session ID (SID)
-- Username
-- Full name
-- User roles (as JSON array)
+| | v13 | v14 | v15 | v16 |
+| --- | --- | --- | --- | --- |
+| Login, logout, session | ✅ | ✅ | ✅ | ✅ |
+| Password reset / change | ✅ | ✅ | ✅ | ✅ |
+| Two factor | ✅ | ✅ | ✅ | ✅ |
+| Permission checks | ✅ | ✅ | ✅ | ✅ |
+| Roles via built-in endpoint | ✅ | ✅ | ✅ | ❌ removed |
+| Roles via `rolesMethod` | ✅ | ✅ | ✅ | ✅ |
 
-This data persists across app restarts and is encrypted on the device.
+### A note on CSRF
 
-### Role-Based Access Control
+Sessions created through `/api/method/login` carry no CSRF token — Frappe
+generates one lazily when a desk or website page is rendered — so writes from
+this package work without one. If you reuse a `sid` that originated in a browser,
+set the token with `flutternext.api.setCsrfToken(...)`.
 
-The package provides flexible role checking:
-- **getUserRoles()**: Fetches roles from server using two methods:
-  1. Dedicated roles endpoint: `/api/method/frappe.core.doctype.user.user.get_roles`
-  2. Fallback to direct table query: `Has Role` table
-- **Caching**: Roles are cached locally for offline access and performance
-- **Dynamic Checking**: Check for any specific role name (e.g., 'Stock Manager', 'HR Admin')
-- **Multiple Role Checks**: Support for checking multiple roles with `hasAnyRole()` and `hasAllRoles()`
-- **Refresh Option**: Optionally force refresh from server instead of using cache
+## Migrating from 1.2.x
 
-## API Reference
+Nothing breaks. Two things are worth doing:
 
-### Authentication Methods
+1. Replace `hasActiveSession()` with `hasStoredSession()` (or `validateSession()`
+   if you wanted a live check — the old method never made one).
+2. If you rely on `hasRole`, either set `rolesMethod` or switch to the permission
+   checks, before your site reaches Frappe v16.
 
-| Method | Parameters | Returns | Description |
-|--------|------------|---------|-------------|
-| `initialize()` | `baseUrl`, `timeout?` | `Future<void>` | Initialize with server URL |
-| `login()` | `usr`, `pwd` | `Future<LoginResult>` | Login with credentials |
-| `logout()` | - | `Future<LogoutResult>` | Logout and clear session |
-| `relogin()` | - | `Future<ReloginResult>` | Restore session from storage |
-| `resetPassword()` | `user` | `Future<PasswordResetResult>` | Request password reset |
-| `changePassword()` | `oldPassword`, `newPassword` | `Future<PasswordChangeResult>` | Change password |
-| `getUserProfile()` | - | `Future<UserProfile?>` | Get current user info |
-| `hasActiveSession()` | - | `Future<bool>` | Check if session exists |
-| `getStoredSid()` | - | `Future<String?>` | Get stored session ID |
-| `getStoredUsername()` | - | `Future<String?>` | Get stored username |
-| `getStoredFullName()` | - | `Future<String?>` | Get stored full name |
-| `clearStoredSession()` | - | `Future<void>` | Clear local session data |
-
-### Role-Based Access Control Methods
-
-| Method | Parameters | Returns | Description |
-|--------|------------|---------|-------------|
-| `role.getUserRoles()` | - | `Future<List<String>>` | Fetch and cache user roles from server |
-| `role.getCachedRoles()` | - | `Future<List<String>>` | Get cached roles without network call |
-| `role.hasRole()` | `roleName`, `refresh?` | `Future<bool>` | Check if user has specific role |
-| `role.hasAnyRole()` | `roleNames`, `refresh?` | `Future<bool>` | Check if user has any of the roles |
-| `role.hasAllRoles()` | `roleNames`, `refresh?` | `Future<bool>` | Check if user has all of the roles |
-| `role.clearCachedRoles()` | - | `Future<void>` | Clear cached role data |
-
-### Models
-
-- `LoginResult`: Contains success status, username, full name, and SID
-- `LogoutResult`: Contains success status and message
-- `ReloginResult`: Contains success status, message, and user profile
-- `PasswordResetResult`: Contains success status and message
-- `PasswordChangeResult`: Contains success status and message
-- `UserProfile`: Contains username, full name, and email
-
-## Error Handling
-
-All methods return result objects with a `success` boolean and optional `message` string:
-
-```dart
-final result = await flutternext.login(usr: username, pwd: password);
-
-if (!result.success) {
-  // Handle error
-  print('Error: ${result.message}');
-}
-```
+See [MIGRATION_GUIDE.md](MIGRATION_GUIDE.md) for the 1.1 → 1.2 role changes.
 
 ## License
 
-MIT License - see LICENSE file for details
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-## Support
-
-For issues, questions, or contributions, please visit the [GitHub repository](https://github.com/handoud/flutter_next_auth/tree/1.2.1).
+MIT — see [LICENSE](LICENSE).

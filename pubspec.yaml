@@ -1,22 +1,29 @@
 name: flutter_next_auth
-description: A Flutter package for NextERP (Frappe/ERPNext) authentication with secure session management.
-version: 1.2.1
-homepage: https://github.com/handoud/flutter_next_auth/tree/1.2.1
+description: Authentication, session management and permission checks for Frappe/ERPNext apps. Secure session storage, token auth, 2FA and Frappe v13-v16 compatible role handling.
+version: 1.3.0
+homepage: https://github.com/handoud/flutter_next_auth
+repository: https://github.com/handoud/flutter_next_auth
+issue_tracker: https://github.com/handoud/flutter_next_auth/issues
+topics:
+  - frappe
+  - erpnext
+  - authentication
+  - session
+  - rbac
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
-  flutter: ">=3.0.0"
+  sdk: '>=3.8.0 <4.0.0'
+  flutter: ">=3.32.0"
 
 dependencies:
   flutter:
     sdk: flutter
-  http: ^1.1.0
-  flutter_secure_storage: ^9.0.0
+  http: ^1.2.0
+  # flutter_secure_storage 10+ pulls win32 ^6, which needs Dart >=3.10.
+  # Bump to ^11.0.0 once this project is on Flutter 3.35 / Dart 3.10 or newer.
+  flutter_secure_storage: ^9.2.4
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-  flutter_lints: ^3.0.0
-
-flutter:
-  # This package does not contain any assets
+  flutter_lints: ^6.0.0
